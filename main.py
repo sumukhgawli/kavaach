@@ -5,10 +5,13 @@ import os
 import requests
 import urllib.parse
 from dotenv import load_dotenv
+import time
 
 load_dotenv()
 token  = os.getenv("GITHUB_TOKEN")
 API_KEY = os.getenv("google_api")
+print("API_KEY:", API_KEY)
+facebook_api = os.getenv("facebook_api")
 CSE_ID  = "342d7ccd8c8d043c2" 
 
 def github_data(query):
@@ -72,7 +75,46 @@ def mod_data(query,total_results):
         print(f"⚠️ Network error while calling Google API: {e}")
         return {"error": str(e), "status": "network_error"}
 
+def facebook_data(query):
+    headers = {
+        "x-rapidapi-host": "facebook-scraper3.p.rapidapi.com",
+        "x-rapidapi-key": facebook_api   # make sure this is defined globally or passed in
+    }
 
+    endpoints = ['videos', 'posts', 'pages']
+    all_data = {}
+
+    for endpoint in endpoints:
+        url = f"https://facebook-scraper3.p.rapidapi.com/search/{endpoint}"
+        params = {"query": query}
+
+        try:
+            print(f"🔍 Fetching {endpoint} for '{query}'...")
+            response = requests.get(url, headers=headers, params=params)
+
+            # Handle rate limit errors
+            if response.status_code == 429:
+                print(f"⚠️ Rate limited on {endpoint}, waiting 10 seconds...")
+                time.sleep(10)
+                response = requests.get(url, headers=headers, params=params)
+
+            response.raise_for_status()
+            data = response.json()
+
+            # Ensure we get only actual results
+            items = data.get("results")
+            if items and isinstance(items, list):
+                all_data[endpoint] = items
+                print(f"✅ Got {len(items)} {endpoint}")
+            else:
+                all_data[endpoint] = []
+                print(f"⚠️ No {endpoint} results found")
+
+        except requests.exceptions.RequestException as e:
+            print(f"❌ Error fetching {endpoint} for '{query}': {e}")
+            all_data[endpoint] = []
+
+    return all_data
 def main():
     root = Tk()
     root.withdraw()
@@ -91,6 +133,8 @@ def main():
 
     github_queries = ["JioSaavn", "JioTv", "JioMart"]
     google_queries = ["Jio Hotstar Mod", "jiotv+ mod"]
+    facebook_queries = ["Mukesh Ambani", "Ambani", "Mukesh Ambani AI"]
+
 
     all_github_rows = []
     all_google_rows = []
@@ -125,13 +169,53 @@ def main():
                 "Link": item.get("link")
             })
 
+    all_facebook_rows = []
+
+    for q in facebook_queries:
+        print(f"\n🔍 [Facebook] Fetching data for: {q}")
+        data3 = facebook_data(q)
+
+        # Loop through each endpoint (videos, posts, pages)
+        for endpoint, items in data3.items():
+            for item in items:
+                # Determine fields safely
+                fb_type = item.get("type")
+                url = (
+                    item.get("url")
+                    or item.get("video_url")
+                    or (item.get("profile_url") if fb_type == "page" else None)
+                )
+
+                # Extract author info
+                if fb_type == "page":
+                    author_name = item.get("name")
+                    profile_url = item.get("profile_url")
+                elif fb_type == "post":
+                    author_name = item.get("author", {}).get("name") if isinstance(item.get("author"), dict) else None
+                    profile_url = item.get("author", {}).get("url") if isinstance(item.get("author"), dict) else None
+                elif fb_type in ["video", "search_video"]:
+                    author_name = item.get("author", {}).get("name") if isinstance(item.get("author"), dict) else None
+                    profile_url = item.get("author", {}).get("url") if isinstance(item.get("author"), dict) else None
+                else:
+                    author_name = None
+                    profile_url = None
+
+                # Only add valid entries
+                if url and author_name:
+                    all_facebook_rows.append({
+                        "Query": q,
+                        "Type": fb_type,
+                        "Author": author_name,
+                        "Profile_URL": profile_url,
+                        "URL": url
+                    })
     df_github = pd.DataFrame(all_github_rows)
     df_google = pd.DataFrame(all_google_rows)
-
+    df_facebook = pd.DataFrame(all_facebook_rows)
     with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
         df_github.to_excel(writer, index=False, sheet_name="Github")
         df_google.to_excel(writer, index=False, sheet_name="Mod apps")
-
+        df_facebook.to_excel(writer, index=False, sheet_name="Facebook")
     print("✅ Excel file created successfully!")
 
 if __name__ == "__main__":
