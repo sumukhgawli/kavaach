@@ -1,3 +1,5 @@
 myenv
 ./myenv
 .env
+./output
+output

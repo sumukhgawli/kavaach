@@ -1,13 +1,24 @@
 import json
 import pandas as pd
 from tkinter import Tk, filedialog
-import os
+import os , sys
 import requests
 import urllib.parse
+import dotenv
 from dotenv import load_dotenv
 import time
 
-load_dotenv()
+
+def resource_path(relative_path):
+    try:
+        base_path = sys._MEIPASS
+    except AttributeError:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
+
+
+env_path = resource_path(".env")
+load_dotenv(env_path)
 token  = os.getenv("GITHUB_TOKEN")
 API_KEY = os.getenv("google_api")
 print("API_KEY:", API_KEY)
